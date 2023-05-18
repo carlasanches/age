@@ -15,7 +15,7 @@
 #include "cypherscan.h"                                                         
 #include "cypher.tab.h" 
 
-void yyerror(char const *s);
+void yyerror(void* scanner, char const *s);
 
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
@@ -58,6 +58,7 @@ int limit_value = 0;
 
 %type <str_val> str_val
 
+%param {void* scanner}
 
 %left PIPE
 %left ARROW
@@ -288,13 +289,47 @@ limit_clause_opt:
 
 %%
 
-void yyerror(char const *s)
+void yyerror(void* scanner, char const *s)
 {
 	printf("Parser error: %s\n", s);
 }
 
-void
+char*
 psql_scan_cypher_command(PsqlScanState state)
-{
+{ 
+    PQExpBufferData mybuf;
 
+    /* Must be scanning already */
+    Assert(state->scanbufhandle != NULL);
+
+    /* Build a local buffer that we'll return the data of */
+    initPQExpBuffer(&mybuf);
+
+    /* Set current output target */
+    state->output_buf = &mybuf;
+
+    /* Set input source */
+    if (state->buffer_stack != NULL)
+            yy_switch_to_buffer(state->buffer_stack->buf, state->scanner);
+    else
+            yy_switch_to_buffer(state->scanbufhandle, state->scanner);
+
+    /* And lex. */
+    yyparse(state->scanner);
+
+    if (match == 1) { 
+        state->start_state = 1;
+    }
+
+    mybuf.data = state->scanbuf;
+
+    /* There are no possible errors in this lex state... */
+
+    /*
+     * In case the caller returns to using the regular SQL lexer, reselect the
+     * appropriate initial state.
+     */
+    psql_scan_reselect_sql_lexer(state);
+
+    return mybuf.data;
 }

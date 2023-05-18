@@ -47,6 +47,7 @@ MainLoop(FILE *source)
 	bool		line_saved_in_history;
 	volatile int successResult = EXIT_SUCCESS;
 	volatile backslashResult slashCmdStatus = PSQL_CMD_UNKNOWN;
+        volatile backslashResult cypherCmdStatus = PSQL_CMD_UNKNOWN;
 	volatile promptStatus_t prompt_status = PROMPT_READY;
 	volatile bool need_redisplay = false;
 	volatile int count_eof = 0;
@@ -412,8 +413,8 @@ MainLoop(FILE *source)
 			}
 
 			if (scan_result == PSCAN_EOL)
-				pset.stmt_lineno++;
-
+                                pset.stmt_lineno++;
+				
 			/*
 			 * Send command if semicolon found, or if end of line and we're in
 			 * single-line mode.
@@ -421,6 +422,11 @@ MainLoop(FILE *source)
 			if (scan_result == PSCAN_SEMICOLON ||
 				(scan_result == PSCAN_EOL && pset.singleline))
 			{
+                            
+                            cypherCmdStatus = HandleCypherCmds(scan_state,
+                                                                cond_stack,
+                                                                query_buf,
+                                                                previous_buf);
 				/*
 				 * Save line in history.  We use history_buf to accumulate
 				 * multi-line queries into a single history entry.  Note that
@@ -491,8 +497,7 @@ MainLoop(FILE *source)
 					pg_append_history(line, history_buf);
 					pg_send_history(history_buf);
 					line_saved_in_history = true;
-				}
-				psql_scan_cypher_command(query_buf->data);
+				}  
 
 				/* execute backslash command */
 				slashCmdStatus = HandleSlashCmds(scan_state,
